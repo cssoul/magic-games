@@ -119,6 +119,15 @@
     <transition name="fade">
       <div v-if="showBoard" class="panel" @click.stop>
         <h2>排行榜 · 限时挑战</h2>
+        <div class="tabs"><button :class="{ on: boardTab === 'global' }" @click="boardTab = 'global'">全球</button><button :class="{ on: boardTab === 'local' }" @click="boardTab = 'local'">本机</button></div>
+        <template v-if="boardTab === 'global'">
+          <table v-if="globalRows.length">
+            <tr><th>名次</th><th>玩家</th><th>得分</th><th>光环</th><th>球门</th><th>飞贼</th></tr>
+            <tr v-for="(r, i) in globalRows" :key="i" :class="{ me: r.name === profile.name }"><td>{{ i + 1 }}</td><td>{{ r.name }}</td><td class="sc">{{ r.score }}</td><td>{{ r.rings }}</td><td>{{ r.hoops }}</td><td>{{ r.snitch }}</td></tr>
+          </table>
+          <p v-else class="empty">{{ globalErr || '还没有人上榜，去挑战一次吧' }}</p>
+        </template>
+        <template v-else>
         <table v-if="records.length">
           <tr><th>名次</th><th>得分</th><th>光环</th><th>球门</th><th>飞贼</th><th>时间</th></tr>
           <tr v-for="(r, i) in records" :key="r.t" :class="{ me: r.t === lastT }">
@@ -126,9 +135,10 @@
           </tr>
         </table>
         <p v-else class="empty">还没有记录，去挑战一次吧</p>
+        </template>
         <div class="row">
           <button class="ghost" @click="showBoard = false">返回</button>
-          <button v-if="records.length" class="ghost dim" @click="clearRecords">清空记录</button>
+          <button v-if="records.length && boardTab === 'local'" class="ghost dim" @click="clearRecords">清空本机记录</button>
         </div>
       </div>
     </transition>
@@ -200,6 +210,10 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Game } from './game/Game.js'
 import { CHARACTERS, BROOMS, charById as charOf, broomById as broomOf } from './game/Wizard.js'
 import { Net } from './game/Net.js'
+import { RealtimeNet } from './game/RealtimeNet.js'
+import { topScores, submitScore } from './game/Board.js'
+// 默认走 Supabase Realtime（可部署到 Vercel）；带 ?server=wss://... 或设置 VITE_WS_URL 时改用自建的 server/index.js
+const NetImpl = new URLSearchParams(location.search).get('server') || import.meta.env.VITE_WS_URL ? Net : RealtimeNet
 // 本地存储：隐私模式或被禁用时静默失败，不影响游戏
 const store = { get: k => { try { return window.localStorage ? window.localStorage.getItem(k) : null } catch { return null } }, set: (k, v) => { try { window.localStorage && window.localStorage.setItem(k, v) } catch {} }, del: k => { try { window.localStorage && window.localStorage.removeItem(k) } catch {} } }
 
@@ -221,8 +235,18 @@ watch(() => state.finished, v => {
   const rec = { score: state.score, rings: state.rings, hoops: state.hoops, snitch: state.snitch, t: Date.now() }
   const all = [...records.value, rec].sort((a, b) => b.score - a.score || a.t - b.t).slice(0, 10)
   records.value = all; store.set(KEY, JSON.stringify(all)); lastT.value = rec.t
+  submitScore({ mode: 'challenge', name: profile.name, char: profile.char, ...rec }).then(loadGlobal)
   const i = all.findIndex(r => r.t === rec.t)
   rankText.value = i === 0 ? (all.length > 1 ? '新纪录！排名第 1' : '首个记录！') : i > 0 ? `排名第 ${i + 1} · 最高分 ${all[0].score}` : `未进入前 10 · 最高分 ${all[0].score}`
+})
+// 全球排行榜（Supabase）
+const globalRows = ref([]), globalErr = ref(''), boardTab = ref('global')
+async function loadGlobal() { try { globalRows.value = await topScores('challenge'); globalErr.value = '' } catch (e) { globalErr.value = e.message } }
+watch(showBoard, v => { if (v) loadGlobal() })
+watch(() => state.mpEnd, e => {
+  if (!e) return
+  const me = e.ranking.find(r => r.id === myId.value)
+  if (me) submitScore({ mode: 'mp', name: me.name, char: me.char, score: me.score, rings: me.rings, hoops: me.hoops, snitch: me.snitch })
 })
 const timeText = computed(() => { const s = Math.max(0, state.timeLeft); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') })
 
@@ -258,9 +282,9 @@ function openMp() { err.value = ''; screen.value = 'mp' }
 async function ensureNet() {
   if (net && net.ready) return true
   busy.value = true; err.value = ''
-  net = new Net(onNet, onNetClose)
+  net = new NetImpl(onNet, onNetClose)
   try { myId.value = await net.connect(hello()); return true }
-  catch (e) { err.value = e.message + '：请确认联机服务器已启动（npm run server）'; net = null; return false }
+  catch (e) { err.value = e.message + '，请检查网络后重试'; net = null; return false }
   finally { busy.value = false }
 }
 async function createRoom() { game && game.audio.init(); if (await ensureNet()) net.send({ t: 'create' }) }
@@ -584,6 +608,9 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); game && game.dispose() })
   .dress { max-height: 90vh; overflow-y: auto }
   .count { top: 18vh; font-size: 72px }
 }
+.tabs { display: flex; justify-content: center; gap: 8px; margin: -6px 0 12px }
+.tabs button { pointer-events: auto; cursor: pointer; padding: 3px 16px; border-radius: 12px; font: 13px Georgia, "Songti SC", serif; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.5) }
+.tabs button.on { background: rgba(255,255,255,.85); color: #2a3a48 }
 .fade-enter-active, .fade-leave-active { transition: opacity .8s }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 </style>

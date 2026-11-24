@@ -69,3 +69,29 @@ location / {
 - 倒计时 4 秒开局；金色飞贼开局 15 秒后出现，有人靠近时会急转加速逃开。
 - 光环 +100（先到先得，6 秒后在别处重新出现），魁地奇球门 +300（每人 3 秒冷却），抓到金色飞贼 +500 并立即结束比赛；10 分钟内没人抓到则按时结束。总分最高者获胜。
 - 光环、飞贼的位置和所有得分都由服务器判定；树木、岩石用固定种子生成，所有设备看到的世界一致。
+
+
+## 部署到 Vercel + Supabase（推荐）
+
+多人联机走 **Supabase Realtime**（广播频道），排行榜存 **Supabase 数据库**，网页是纯静态文件，所以整个游戏可以直接部署到 Vercel，不需要自己的服务器。
+
+- `src/config.js`：Supabase 项目地址和 publishable key（公开密钥，可以放前端；数据库连接串和密码绝不能放进代码）。
+- `src/game/RealtimeNet.js`：联机连接；`src/game/RoomHost.js`：对局规则，运行在房主的浏览器里。房主掉线时，下一位玩家自动接任房主。
+- `supabase/migrations/20261124000000_scores.sql`：全球排行榜的建表 SQL。
+
+### 1. 建排行榜表（只做一次）
+任选一种：
+- Supabase 控制台 → SQL Editor → 粘贴上面那个 .sql 文件的内容 → Run；
+- 或命令行：`supabase link --project-ref umkwakonenjrgqygsqae && supabase db push`
+
+### 2. 推送代码
+```bash
+git add -A && git commit -m "multiplayer via Supabase Realtime + global leaderboard" && git push
+```
+
+### 3. 在 Vercel 导入
+Vercel → Add New… → Project → 选择 GitHub 仓库 `cssoul/magic-games` → Framework 选 Vite（`vercel.json` 已配置好）→ Deploy。
+之后每次 `git push`，Vercel 会自动重新部署。
+
+### 免费额度提示
+Supabase 免费版 Realtime 有每秒消息数和并发连接上限。每位玩家每秒发送 10 次位置，建议每个房间 2～6 人。

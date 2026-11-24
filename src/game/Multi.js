@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { createWizard } from './Wizard.js'
 
 // 多人对抗：其他玩家的角色（插值平滑显示 + 头顶名字）、服务器统一放置的光环和金色飞贼。
-const DELAY = 130          // 远程玩家延迟 130 ms 显示，在两次快照之间插值，动作才流畅
+const DELAY = 170          // 远程玩家延迟 130 ms 显示，在两次快照之间插值，动作才流畅
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z)
 const lerpAng = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k
 

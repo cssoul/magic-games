@@ -310,7 +310,7 @@ export class Game {
         const sendSt = () => this.net.send({ t: 'st', d: [p.position.x, p.position.y, p.position.z, this.yaw, this.pitch, this.roll, this.vel, this.hover] })
         const claim = m.ring != null || m.catch || (res && res.hoop && active)
         this._stT = (this._stT || 0) - dt
-        if (this._stT <= 0 || claim) { this._stT = 1 / 15; sendSt() }        // 先上报最新位置，服务器再按这个位置判定得分
+        if (this._stT <= 0 || claim) { this._stT = 1 / 10; sendSt() }        // 先上报最新位置，服务器再按这个位置判定得分
         if (m.ring != null) this.net.send({ t: 'ring', id: m.ring })
         if (m.catch) this.net.send({ t: 'catch' })
         if (res && res.hoop && active) this.net.send({ t: 'hoop' })
