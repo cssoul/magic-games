@@ -1,0 +1,6 @@
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#app{width:100%;height:100%;overflow:hidden;background:#dfeaf0;color:#24323a;
+  font:15px/1.4 Georgia,"Times New Roman","Songti SC",serif;user-select:none;-webkit-user-select:none}
+canvas{display:block;width:100%;height:100%}
+html,body,#app{touch-action:none;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+canvas{touch-action:none}
