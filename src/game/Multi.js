@@ -41,7 +41,7 @@ export class Multi {
       if (a && a.look !== look) { this._drop(p.id); a = null }
       if (!a) {
         const w = createWizard({ char: p.char, broom: p.broom }), tag = nameTag(p.name, p.color || '#fff')
-        tag.position.y = 1.7; w.root.add(tag); w.root.visible = false; this.scene.add(w.root)
+        tag.position.y = 2.05; w.root.add(tag); w.root.visible = false; this.scene.add(w.root)
         a = { w, tag, look, buf: [], name: p.name, color: p.color, pos: V(), seen: false }; this.av.set(p.id, a)
       }
     }

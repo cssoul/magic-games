@@ -170,7 +170,7 @@
 
     <transition name="fade">
       <div v-if="state.started && !state.intro" class="hud">
-        <canvas ref="compassEl" class="compass"></canvas>
+        <canvas v-if="!isTouch" ref="compassEl" class="compass"></canvas>
         <div v-if="state.mode === 'challenge' || state.mode === 'mp'" class="timer" :class="{ hurry: state.timeLeft <= 30 }">{{ timeText }}</div>
         <div class="score">{{ state.score }}</div>
         <div v-if="state.mode === 'mp' && room" class="live">
@@ -180,8 +180,15 @@
         <div class="tally">光环 {{ state.rings }}<i>·</i>球门 {{ state.hoops }}<i>·</i>飞贼 {{ state.snitch }}</div>
         <div class="boost"><span :style="{ transform: `scaleX(${state.boost})` }"></span></div>
         <div class="fps">{{ state.fps }} fps</div>
-        <button class="round" @click.stop="togglePause">{{ state.paused ? '▶' : 'Ⅱ' }}</button>
-        <button class="round mute" :class="{ off: state.muted }" @click.stop="toggleMute">♪</button>
+        <button class="round" :aria-label="state.paused ? '继续' : '暂停'" @click.stop="togglePause">
+          <svg v-if="state.paused" viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a.8.8 0 0 0 1.2.7l10-6.4a.8.8 0 0 0 0-1.4l-10-6.4a.8.8 0 0 0-1.2.7z" fill="currentColor"/></svg>
+          <svg v-else viewBox="0 0 24 24"><rect x="6.4" y="5.4" width="4" height="13.2" rx="1.3" fill="currentColor"/><rect x="13.6" y="5.4" width="4" height="13.2" rx="1.3" fill="currentColor"/></svg>
+        </button>
+        <button class="round mute" :class="{ off: state.muted }" :aria-label="state.muted ? '打开声音' : '静音'" @click.stop="toggleMute">
+          <svg viewBox="0 0 24 24"><path d="M4 9.6h3.4l4.7-4v12.8l-4.7-4H4a.8.8 0 0 1-.8-.8V10.4a.8.8 0 0 1 .8-.8z" fill="currentColor"/>
+            <path v-if="!state.muted" d="M15.4 9.2a4 4 0 0 1 0 5.6M17.9 6.7a7.6 7.6 0 0 1 0 10.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path v-else d="M15.6 9.6l4.8 4.8M20.4 9.6l-4.8 4.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
         <div class="minimap">
           <canvas ref="mapEl"></canvas>
           <div class="coord">{{ coord }}</div>
@@ -198,9 +205,16 @@
     </template>
 
     <!-- 时间与天气 -->
-    <div v-if="state.ready && !showBoard && !state.intro && screen !== 'dress' && screen !== 'name' && !(isTouch && state.started)" class="env" :class="{ locked: envLocked }" @click.stop>
-      <div><label>{{ envLocked ? '房主' : '时间' }}</label><button v-for="o in TOD" :key="o[0]" :class="{ on: state.tod === o[0] }" @click="setTime(o[0])" :disabled="envLocked">{{ o[1] }}</button></div>
-      <div><label>天气</label><button v-for="o in WEA" :key="o[0]" :class="{ on: state.weather === o[0] }" @click="setWeather(o[0])" :disabled="envLocked">{{ o[1] }}</button></div>
+    <div v-if="state.ready && !showBoard && !state.intro && screen !== 'dress' && screen !== 'name'" class="env" :class="{ locked: envLocked, compact: isTouch, flying: state.started }" @click.stop>
+      <button v-if="isTouch" class="round envBtn" :class="{ on: envOpen }" aria-label="时间与天气" @click="envOpen = !envOpen">
+        <svg viewBox="0 0 24 24"><circle cx="8.6" cy="8.6" r="3.2" fill="currentColor"/>
+          <path d="M8.6 2.4v1.6M8.6 13.2v1.6M2.4 8.6H4M13.2 8.6h1.6M4.2 4.2l1.1 1.1M11.9 11.9l1.1 1.1M4.2 13l1.1-1.1M11.9 5.3l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M10.2 20.4h8.6a3.1 3.1 0 0 0 .3-6.2 4.4 4.4 0 0 0-8.4-1 3.6 3.6 0 0 0-.5 7.2z" fill="currentColor" stroke="rgba(30,45,60,.35)" stroke-width=".8"/></svg>
+      </button>
+      <div v-if="!isTouch || envOpen" class="envPanel">
+        <div><label>{{ envLocked ? '房主' : '时间' }}</label><button v-for="o in TOD" :key="o[0]" :class="{ on: state.tod === o[0] }" @click="setTime(o[0])" :disabled="envLocked">{{ o[1] }}</button></div>
+        <div><label>天气</label><button v-for="o in WEA" :key="o[0]" :class="{ on: state.weather === o[0] }" @click="setWeather(o[0])" :disabled="envLocked">{{ o[1] }}</button></div>
+      </div>
     </div>
   </div>
 </template>
@@ -437,14 +451,16 @@ function drawCompass(m) {
 function loop() {
   raf = requestAnimationFrame(loop)
   if (!game || !state.started || (frame++ & 1)) return
-  if (!mapEl.value || !compassEl.value) return
-  const m = game.mapInfo(); drawMap(m); drawCompass(m)
+  if (!mapEl.value) return
+  const m = game.mapInfo(); drawMap(m); if (compassEl.value) drawCompass(m)
 }
 
 // ---------------- 触屏操控 ----------------
 const isTouch = ref(typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches)
 addEventListener('touchstart', () => { isTouch.value = true }, { once: true, passive: true })
 watch(isTouch, v => game && game.setTouchMode(v))
+const envOpen = ref(false)
+watch(() => state.started, () => (envOpen.value = false))
 const knob = reactive({ x: 0, y: 0 }), boosting = ref(false), STICK_R = 52
 let stick = null
 function stickDown(e) {
@@ -521,7 +537,9 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); game && game.dispose() })
 .fps { position: absolute; top: 28px; right: 32px; font-size: 12px; opacity: .6 }
 .round { position: absolute; top: 50px; right: 28px; width: 34px; height: 34px; border-radius: 50%; font-size: 13px }
 .mute { top: 92px }
-.mute.off { opacity: .45; text-decoration: line-through }
+.mute.off { opacity: .55 }
+.round { display: grid; place-items: center; padding: 0 }
+.round svg { width: 17px; height: 17px; display: block; filter: drop-shadow(0 1px 3px rgba(20, 50, 80, .45)) }
 .minimap { position: absolute; right: 24px; bottom: 24px; width: 180px; text-align: center }
 .minimap canvas { width: 180px; height: 180px; display: block; filter: drop-shadow(0 2px 10px rgba(20, 50, 80, .45)) }
 .coord { margin-top: 6px; font-size: 11px; opacity: .9; white-space: nowrap }
@@ -577,8 +595,8 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); game && game.dispose() })
   pointer-events: auto; touch-action: none; color: #fff; font: 16px Georgia, "Songti SC", serif; letter-spacing: .1em; text-shadow: 0 1px 6px rgba(20,50,80,.6);
   background: rgba(255,211,107,.22); border: 1.5px solid rgba(255,230,170,.85); backdrop-filter: blur(4px); transition: background .1s, transform .1s; -webkit-user-select: none; user-select: none }
 .boostBtn.on { background: rgba(255,211,107,.6); transform: scale(.93) }
-.touch .minimap { right: calc(20px + env(safe-area-inset-right)); bottom: calc(142px + env(safe-area-inset-bottom)); width: 118px }
-.touch .minimap canvas { width: 118px; height: 118px }
+.touch .minimap { right: calc(16px + env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top)); bottom: auto; width: 112px }
+.touch .minimap canvas { width: 112px; height: 112px }
 .touch .coord { display: none }
 .touch .boost { bottom: calc(18px + env(safe-area-inset-bottom)); width: 150px; margin-left: -75px }
 .touch .compass { width: min(520px, 84vw); height: auto; margin-left: 0; transform: translateX(-50%) }
@@ -586,9 +604,9 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); game && game.dispose() })
 .touch .tally { top: calc(48px + env(safe-area-inset-top)); left: calc(21px + env(safe-area-inset-left)); font-size: 12px }
 .touch .live { top: calc(70px + env(safe-area-inset-top)); left: calc(21px + env(safe-area-inset-left)); font-size: 12px; min-width: 130px }
 .touch .fps { display: none }
-.touch .round { top: calc(14px + env(safe-area-inset-top)); right: calc(18px + env(safe-area-inset-right)); width: 40px; height: 40px }
-.touch .mute { top: calc(62px + env(safe-area-inset-top)) }
-.touch .timer { top: 64px; font-size: 20px }
+.touch .round { top: calc(14px + env(safe-area-inset-top)); right: calc(16px + env(safe-area-inset-right)); width: 40px; height: 40px }
+.touch .mute { top: calc(14px + env(safe-area-inset-top)); right: calc(64px + env(safe-area-inset-right)) }
+.touch .timer { top: calc(16px + env(safe-area-inset-top)); font-size: 20px }
 @media (max-width: 760px) {
   .panel { min-width: 0; width: calc(100vw - 28px); padding: 20px 14px; max-height: 88vh; overflow-y: auto }
   .panel table { font-size: 12px } .panel td, .panel th { padding: 5px 4px }
@@ -611,6 +629,22 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); game && game.dispose() })
 .tabs { display: flex; justify-content: center; gap: 8px; margin: -6px 0 12px }
 .tabs button { pointer-events: auto; cursor: pointer; padding: 3px 16px; border-radius: 12px; font: 13px Georgia, "Songti SC", serif; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.5) }
 .tabs button.on { background: rgba(255,255,255,.85); color: #2a3a48 }
+.touch .round svg { width: 19px; height: 19px }
+/* 手机：时间天气收成右上角一个入口 */
+.env.compact { left: auto; right: calc(18px + env(safe-area-inset-right)); top: calc(14px + env(safe-area-inset-top)); bottom: auto; display: flex; flex-direction: column; align-items: flex-end }
+.env.compact.flying { right: calc(112px + env(safe-area-inset-right)) }
+.env.compact .envBtn { position: relative; top: auto; right: auto; border-radius: 50%; padding: 0 }
+.env.compact .envBtn.on { background: rgba(255, 255, 255, .4) }
+.env .envPanel { display: block }
+.env.compact { z-index: 5 }
+.env.compact .envPanel { margin-top: 8px; padding: 6px 10px 9px; border-radius: 10px; background: rgba(24, 36, 52, .6); border: 1px solid rgba(255, 255, 255, .35); backdrop-filter: blur(8px) }
+.env.compact .envPanel div { justify-content: flex-end }
+/* 手机：主菜单 5 个按钮缩小成胶囊，不显示说明文字 */
+.touch .modes { gap: 8px; max-width: 420px; margin-left: auto; margin-right: auto }
+.touch .modes button { width: auto; min-width: 0; padding: 8px 15px; border-radius: 18px }
+.touch .modes button b { font-size: 14px; letter-spacing: .06em }
+.touch .modes button span { display: none }
+.touch .modes button:hover { transform: none }
 .fade-enter-active, .fade-leave-active { transition: opacity .8s }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 </style>
